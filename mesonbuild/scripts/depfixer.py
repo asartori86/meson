@@ -14,6 +14,7 @@
 
 
 import sys, struct
+import shutil, subprocess
 
 SHT_STRTAB = 3
 DT_NEEDED = 1
@@ -337,19 +338,52 @@ class Elf(DataSizes):
             entry.write(self.bf)
         return None
 
+def fix_elf(args):
+    with Elf(args[0]) as e:
+        if len(args) == 1:
+            e.print_rpath()
+            e.print_runpath()
+        else:
+            e.fix_rpath(args[1])
+
+def get_darwin_rpaths_to_remove(fname):
+    out = subprocess.check_output(['otool', '-l', fname], universal_newlines=True)
+    result = []
+    current_cmd = 'FOOBAR'
+    for line in out.split('\n'):
+        if ' ' not in line:
+            continue
+        key, value = line.strip().split(' ', 1)
+        if key == 'cmd':
+            current_cmd = value
+        if key == 'path' and current_cmd == 'LC_RPATH':
+            rp = value.split('(', 1)[0].strip()
+            result.append(rp)
+    return result
+
+def fix_darwin(fname, new_rpath):
+    try:
+        for rp in get_darwin_rpaths_to_remove(fname):
+            subprocess.check_call(['install_name_tool', '-delete_rpath', rp, fname])
+        if new_rpath != '':
+            subprocess.check_call(['install_name_tool', '-add_rpath', new_rpath, fname])
+    except Exception as e:
+        raise
+        sys.exit(0)
+
 def run(args):
     if len(args) < 1 or len(args) > 2:
         print('This application resets target rpath.')
         print('Don\'t run this unless you know what you are doing.')
         print('%s: <binary file> <prefix>' % sys.argv[0])
         sys.exit(1)
-    with Elf(args[0]) as e:
-        if len(args) == 1:
-            e.print_rpath()
-            e.print_runpath()
-        else:
-            new_rpath = args[1]
-            e.fix_rpath(new_rpath)
+    try:
+        fix_elf(args)
+        return 0
+    except Exception:
+        pass
+    if shutil.which('install_name_tool'):
+        fix_darwin(args[0], args[1])
     return 0
 
 if __name__ == '__main__':
