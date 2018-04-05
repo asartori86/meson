@@ -2321,7 +2321,6 @@ to directly access options of other subprojects.''')
         required = kwargs.get('required', True)
         if not isinstance(required, bool):
             raise InvalidArguments('"required" argument must be a boolean.')
-        self.store_name_lookups(args)
         progobj = self.program_from_overrides(args)
         if progobj is None and self.build.environment.is_cross_build():
             use_native = kwargs.get('native', False)
@@ -2335,6 +2334,8 @@ to directly access options of other subprojects.''')
             raise InvalidArguments('Program(s) {!r} not found or not executable'.format(args))
         if progobj is None:
             return ExternalProgramHolder(dependencies.NonExistingExternalProgram())
+        # Only store successful lookups
+        self.store_name_lookups(args)
         return progobj
 
     def func_find_library(self, node, args, kwargs):
